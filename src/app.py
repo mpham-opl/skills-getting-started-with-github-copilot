@@ -8,8 +8,41 @@ for extracurricular activities at Mergington High School.
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, ConfigDict
 import os
 from pathlib import Path
+
+
+# Pydantic models for type safety and validation
+class Activity(BaseModel):
+    """Represents an extracurricular activity"""
+    name: str
+    description: str
+    schedule: str
+    max_participants: int
+    participants: list[str]
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "name": "Chess Club",
+                "description": "Learn strategies and compete in chess tournaments",
+                "schedule": "Fridays, 3:30 PM - 5:00 PM",
+                "max_participants": 12,
+                "participants": ["michael@mergington.edu", "daniel@mergington.edu"]
+            }
+        }
+    )
+
+
+class SignupResponse(BaseModel):
+    """Response after signing up for an activity"""
+    message: str
+
+
+class RemovalResponse(BaseModel):
+    """Response after removing a participant from an activity"""
+    message: str
 
 app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")
@@ -38,6 +71,42 @@ activities = {
         "schedule": "Mondays, Wednesdays, Fridays, 2:00 PM - 3:00 PM",
         "max_participants": 30,
         "participants": ["john@mergington.edu", "olivia@mergington.edu"]
+    },
+    "Soccer Team": {
+        "description": "Team-based soccer practice and competitive matches",
+        "schedule": "Tuesdays and Thursdays, 4:00 PM - 5:30 PM",
+        "max_participants": 18,
+        "participants": ["liam@mergington.edu", "ava@mergington.edu"]
+    },
+    "Swimming Club": {
+        "description": "Swim training, laps, and water safety",
+        "schedule": "Mondays, Wednesdays, 4:00 PM - 5:00 PM",
+        "max_participants": 15,
+        "participants": ["noah@mergington.edu", "mia@mergington.edu"]
+    },
+    "Art Club": {
+        "description": "Explore drawing, painting, and creative art projects",
+        "schedule": "Wednesdays, 3:30 PM - 5:00 PM",
+        "max_participants": 16,
+        "participants": ["sophia@mergington.edu", "lucas@mergington.edu"]
+    },
+    "Drama Society": {
+        "description": "Acting, stagecraft, and theater production",
+        "schedule": "Thursdays, 4:00 PM - 5:30 PM",
+        "max_participants": 20,
+        "participants": ["isabella@mergington.edu", "ethan@mergington.edu"]
+    },
+    "Math Olympiad": {
+        "description": "Advanced math problem solving and competition preparation",
+        "schedule": "Tuesdays, 4:30 PM - 6:00 PM",
+        "max_participants": 14,
+        "participants": ["oliver@mergington.edu", "emma@mergington.edu"]
+    },
+    "Science Club": {
+        "description": "Hands-on experiments and science exploration",
+        "schedule": "Fridays, 3:30 PM - 5:00 PM",
+        "max_participants": 18,
+        "participants": ["mia@mergington.edu", "benjamin@mergington.edu"]
     }
 }
 
@@ -48,12 +117,13 @@ def root():
 
 
 @app.get("/activities")
-def get_activities():
+def get_activities() -> dict:
+    """Get all available activities with their details and participants"""
     return activities
 
 
-@app.post("/activities/{activity_name}/signup")
-def signup_for_activity(activity_name: str, email: str):
+@app.post("/activities/{activity_name}/signup", response_model=SignupResponse)
+def signup_for_activity(activity_name: str, email: str) -> SignupResponse:
     """Sign up a student for an activity"""
     # Validate activity exists
     if activity_name not in activities:
@@ -62,6 +132,25 @@ def signup_for_activity(activity_name: str, email: str):
     # Get the specific activity
     activity = activities[activity_name]
 
+    # Validate student is not already signed up
+    if email in activity["participants"]:
+        raise HTTPException(status_code=400, detail="Student is already signed up for this activity")
+
     # Add student
     activity["participants"].append(email)
-    return {"message": f"Signed up {email} for {activity_name}"}
+    return SignupResponse(message=f"Signed up {email} for {activity_name}")
+
+
+@app.delete("/activities/{activity_name}/participants", response_model=RemovalResponse)
+def remove_participant(activity_name: str, email: str) -> RemovalResponse:
+    """Unregister a student from an activity."""
+    if activity_name not in activities:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    activity = activities[activity_name]
+
+    if email not in activity["participants"]:
+        raise HTTPException(status_code=404, detail="Participant not found")
+
+    activity["participants"].remove(email)
+    return RemovalResponse(message=f"Removed {email} from {activity_name}")
